@@ -1,10 +1,14 @@
 // const express = require("express");
 import express from "express";
+import cors from "cors";
 import { PrismaClient } from "@prisma/client";
 const app = express();
 const port = 3001;
 
 const prisma = new PrismaClient();
+
+// CORS public
+app.use(cors());
 
 // Temp Rezepte laden
 // const recipes = require("../assets/temp-data.json");
