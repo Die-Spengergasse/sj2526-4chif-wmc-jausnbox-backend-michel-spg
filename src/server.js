@@ -1,9 +1,18 @@
 // const express = require("express");
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 const app = express();
 const port = 3001;
+
+// Statische Bilder bereitstellen
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use("/images", express.static(path.join(__dirname,
+"../assets/images")));
 
 const prisma = new PrismaClient();
 

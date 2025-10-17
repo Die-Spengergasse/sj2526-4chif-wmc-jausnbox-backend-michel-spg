@@ -16,6 +16,7 @@ model Recipe {
  description String?
  duration Int? // Koch-/Zubereitungszeit in Minuten
  instructions String?
+ image String?
  ingredients Ingredient[] // Relation zu den Zutaten
 }
 

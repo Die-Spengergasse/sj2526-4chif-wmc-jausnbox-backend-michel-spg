@@ -7,6 +7,7 @@ async function main() {
       description: "Ein klassisches italienisches Gericht.",
       duration: 45,
       instructions: "Zuerst die Spaghetti kochen …",
+      image: "spaghetti_bolognese.jpg",
       ingredients: {
         create: [
           { name: "Spaghetti", quantity: "200g" },
@@ -22,6 +23,7 @@ async function main() {
       description: "Weiche und fluffige Pfannkuchen.",
       duration: 20,
       instructions: "Alle Zutaten verrühren …",
+      image: "pancakes.jpg",
       ingredients: {
         create: [
           { name: "Mehl", quantity: "200g" },
