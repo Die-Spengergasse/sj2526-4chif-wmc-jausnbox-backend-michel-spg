@@ -124,18 +124,24 @@ app.get("/api/recipes", async (req, res) => {
 // URL: http://localhost:3000/api/recipes/3
 // URL: http://localhost:3000/api/recipes/10
 app.get("/api/recipes/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  console.log(id);
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
 
-  // const recipe = recipes.find((recipe) => recipe.id === id);
-  const recipe = await prisma.recipe.findUnique({
-    where: { id: id },
-    include: { ingredients: true },
-  });
+    const recipe = await prisma.recipe.findUnique({
+      where: { id: id },
+      include: { ingredients: true },
+    });
 
-  if (!recipe) res.status(404).json({ message: "Recipe not found!" });
+    if (!recipe) {
+      return res.status(404).json({ message: "Recipe not found!" });
+    }
 
-  res.json(recipe);
+    res.json(recipe);
+  } catch (error) {
+    console.error("Error fetching recipe:", error);
+    res.status(500).json({ message: `Error fetching recipe: ${id}` });
+  }
 });
 
 app.listen(port, () => {
