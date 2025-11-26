@@ -144,6 +144,39 @@ app.get("/api/recipes/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/recipes/:id
+app.delete("/api/recipes/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+
+  try {
+    // Transaktion für konsistente Löschung
+    const recipe = await prisma.$transaction(async (tx) => {
+      const r = await tx.recipe.findUnique({ where: { id } });
+      if (!r) return null;
+
+      // Falls keine Cascade-Relation:
+      await tx.ingredient.deleteMany({ where: { recipeId: id } });
+      await tx.recipe.delete({ where: { id } });
+      return r;
+    });
+
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+
+    res.json({ message: "Recipe deleted successfully" });
+
+    // Bilddatei löschen, wenn nicht Placeholder
+    if (recipe.image && recipe.image !== "placeholder.png") {
+      const imagePath = path.join(imagesDir, recipe.image);
+      // Löscht die Bilddatei vom Dateisystem
+      unlink(imagePath).catch(err => console.error("Image delete error:", err));
+    }
+  } catch (e) {
+    console.error("Error deleting recipe:", e);
+    res.status(500).json({ message: "Error deleting recipe" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
