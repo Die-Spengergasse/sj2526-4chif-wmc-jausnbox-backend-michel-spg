@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import { mkdirSync } from "fs";
+import { unlink } from "fs/promises";
 import multer from "multer";
 
 const app = express();
