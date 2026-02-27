@@ -92,7 +92,7 @@ app.post("/api/recipes", maybeUploadImage, async (req, res) => {
       }))
       .filter((i) => i.name); // drop empty items
     const image = req.file ? `${req.file.filename}` : "placeholder.png";
-    
+
     const created = await prisma.recipe.create({
       data: {
         title,
@@ -127,7 +127,8 @@ app.get("/api/recipes", async (req, res) => {
 app.get("/api/recipes/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+    if (Number.isNaN(id))
+      return res.status(400).json({ message: "Invalid id" });
 
     const recipe = await prisma.recipe.findUnique({
       where: { id: id },
@@ -170,11 +171,89 @@ app.delete("/api/recipes/:id", async (req, res) => {
     if (recipe.image && recipe.image !== "placeholder.png") {
       const imagePath = path.join(imagesDir, recipe.image);
       // Löscht die Bilddatei vom Dateisystem
-      unlink(imagePath).catch(err => console.error("Image delete error:", err));
+      unlink(imagePath).catch((err) =>
+        console.error("Image delete error:", err),
+      );
     }
   } catch (e) {
     console.error("Error deleting recipe:", e);
     res.status(500).json({ message: "Error deleting recipe" });
+  }
+});
+
+// PUT /api/recipes/:id - update recipe (optional image upload)
+app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+
+  try {
+    const existing = await prisma.recipe.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ message: "Recipe not found" });
+
+    const parseArray = (val) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === "string" && val.trim()) {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    };
+
+    const title = req.body.title ? req.body.title.trim() : existing.title;
+    const description = req.body.description ?? existing.description;
+    const instructions = req.body.instructions ?? existing.instructions;
+    const duration =
+      req.body.duration === undefined ||
+      req.body.duration === null ||
+      req.body.duration === ""
+        ? existing.duration
+        : Number(req.body.duration);
+
+    if (duration !== null && Number.isNaN(duration)) {
+      return res.status(400).json({ message: "duration must be a number" });
+    }
+
+    const ingredientsInput = parseArray(req.body.ingredients)
+      .map((i) => ({
+        name: i?.name ?? "",
+        quantity: i?.quantity ?? "",
+      }))
+      .filter((i) => i.name); // drop empty items
+    const image = req.file ? `${req.file.filename}` : existing.image;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const r = await tx.recipe.update({
+        where: { id },
+        data: {
+          title,
+          description,
+          duration,
+          instructions,
+          image,
+          ingredients: ingredientsInput.length
+            ? { deleteMany: {}, create: ingredientsInput }
+            : undefined,
+        },
+        include: { ingredients: true },
+      });
+      return r;
+    });
+
+    res.json(updated);
+    
+    // Altes Bild löschen, wenn neues hochgeladen und altes kein Placeholder
+    if (req.file && existing.image && existing.image !== "placeholder.png") {
+      const oldImagePath = path.join(imagesDir, existing.image);
+      unlink(oldImagePath).catch((err) =>
+        console.error("Old image delete error:", err),
+      );
+    }
+  } catch (error) {
+    console.error("Error updating recipe:", error);
+    res.status(500).json({ message: "Error updating recipe" });
   }
 });
 
