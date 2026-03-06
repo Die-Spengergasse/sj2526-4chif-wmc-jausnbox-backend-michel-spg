@@ -181,7 +181,7 @@ app.delete("/api/recipes/:id", async (req, res) => {
   }
 });
 
-// PUT /api/recipes/:id - update recipe (optional image upload)
+// PUT /api/recipes/:id - update recipe
 app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
@@ -202,7 +202,7 @@ app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
       return [];
     };
 
-    const title = req.body.title ? req.body.title.trim() : existing.title;
+    const title = (req.body.title || "").trim();
     const description = req.body.description ?? existing.description;
     const instructions = req.body.instructions ?? existing.instructions;
     const duration =
@@ -212,6 +212,9 @@ app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
         ? existing.duration
         : Number(req.body.duration);
 
+    if (!title) {
+      return res.status(400).json({ message: "title is required" });
+    }
     if (duration !== null && Number.isNaN(duration)) {
       return res.status(400).json({ message: "duration must be a number" });
     }
@@ -221,11 +224,18 @@ app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
         name: i?.name ?? "",
         quantity: i?.quantity ?? "",
       }))
-      .filter((i) => i.name); // drop empty items
-    const image = req.file ? `${req.file.filename}` : existing.image;
+      .filter((i) => i.name);
+
+    // Neues Bild oder altes behalten
+    const image = req.file ? req.file.filename : existing.image;
 
     const updated = await prisma.$transaction(async (tx) => {
-      const r = await tx.recipe.update({
+      // Alte Zutaten löschen und neue anlegen
+      if (ingredientsInput.length > 0) {
+        await tx.ingredient.deleteMany({ where: { recipeId: id } });
+      }
+
+      return tx.recipe.update({
         where: { id },
         data: {
           title,
@@ -234,23 +244,22 @@ app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
           instructions,
           image,
           ingredients: ingredientsInput.length
-            ? { deleteMany: {}, create: ingredientsInput }
+            ? { create: ingredientsInput }
             : undefined,
         },
         include: { ingredients: true },
       });
-      return r;
     });
 
-    res.json(updated);
-    
-    // Altes Bild löschen, wenn neues hochgeladen und altes kein Placeholder
+    // Altes Bild löschen wenn ein neues hochgeladen wurde
     if (req.file && existing.image && existing.image !== "placeholder.png") {
       const oldImagePath = path.join(imagesDir, existing.image);
       unlink(oldImagePath).catch((err) =>
         console.error("Old image delete error:", err),
       );
     }
+
+    res.json(updated);
   } catch (error) {
     console.error("Error updating recipe:", error);
     res.status(500).json({ message: "Error updating recipe" });
