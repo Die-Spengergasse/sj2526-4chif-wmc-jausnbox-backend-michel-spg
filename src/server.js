@@ -7,6 +7,9 @@ import { PrismaClient } from "@prisma/client";
 import { mkdirSync } from "fs";
 import { unlink } from "fs/promises";
 import multer from "multer";
+import authRoutes from "./routes/auth.js";
+import profileRoutes from "./routes/profile.js";
+import authenticate from "./middleware/authenticate.js";
 
 const app = express();
 const port = 3001;
@@ -52,9 +55,51 @@ app.use(express.json());
 // URL-encoded Body Parser application/x-www-form-urlencoded
 app.use(express.urlencoded({ extended: true }));
 
+// --- Auth Routes (öffentlich) ---
+app.use("/auth", authRoutes);
+
+// --- Geschützte Route: Profil ---
+app.use("/profile", profileRoutes);
+
+// --- Recipe Routes ---
+// GET Routen bleiben öffentlich (jeder darf Rezepte lesen)
+// URL: http://localhost:3000/api/recipes
+app.get("/api/recipes", async (req, res) => {
+  const data = await prisma.recipe.findMany({
+    include: { ingredients: true },
+  });
+  res.json(data);
+});
+
+// URL: http://localhost:3000/api/recipes/1
+// URL: http://localhost:3000/api/recipes/3
+// URL: http://localhost:3000/api/recipes/10
+app.get("/api/recipes/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id))
+      return res.status(400).json({ message: "Invalid id" });
+
+    const recipe = await prisma.recipe.findUnique({
+      where: { id: id },
+      include: { ingredients: true },
+    });
+
+    if (!recipe) {
+      return res.status(404).json({ message: "Recipe not found!" });
+    }
+
+    res.json(recipe);
+  } catch (error) {
+    console.error("Error fetching recipe:", error);
+    res.status(500).json({ message: `Error fetching recipe: ${id}` });
+  }
+});
+
+// POST, PUT, DELETE sind geschützt (nur eingeloggte User)
 // POST /api/recipes - create recipe (image optional, default: placeholder.png)
 // Middleware maybeUploadImage checks if multipart/form-data
-app.post("/api/recipes", maybeUploadImage, async (req, res) => {
+app.post("/api/recipes", authenticate, maybeUploadImage, async (req, res) => {
   try {
     // Accept both JSON and multipart/form-data
     const parseArray = (val) => {
@@ -113,41 +158,8 @@ app.post("/api/recipes", maybeUploadImage, async (req, res) => {
   }
 });
 
-// URL: http://localhost:3000/api/recipes
-app.get("/api/recipes", async (req, res) => {
-  const data = await prisma.recipe.findMany({
-    include: { ingredients: true },
-  });
-  res.json(data);
-});
-
-// URL: http://localhost:3000/api/recipes/1
-// URL: http://localhost:3000/api/recipes/3
-// URL: http://localhost:3000/api/recipes/10
-app.get("/api/recipes/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    if (Number.isNaN(id))
-      return res.status(400).json({ message: "Invalid id" });
-
-    const recipe = await prisma.recipe.findUnique({
-      where: { id: id },
-      include: { ingredients: true },
-    });
-
-    if (!recipe) {
-      return res.status(404).json({ message: "Recipe not found!" });
-    }
-
-    res.json(recipe);
-  } catch (error) {
-    console.error("Error fetching recipe:", error);
-    res.status(500).json({ message: `Error fetching recipe: ${id}` });
-  }
-});
-
 // DELETE /api/recipes/:id
-app.delete("/api/recipes/:id", async (req, res) => {
+app.delete("/api/recipes/:id", authenticate, async (req, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
 
@@ -182,7 +194,7 @@ app.delete("/api/recipes/:id", async (req, res) => {
 });
 
 // PUT /api/recipes/:id - update recipe
-app.put("/api/recipes/:id", maybeUploadImage, async (req, res) => {
+app.put("/api/recipes/:id", authenticate, maybeUploadImage, async (req, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
 
